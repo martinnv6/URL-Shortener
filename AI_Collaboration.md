@@ -200,7 +200,25 @@
   - **SQLite Parallel Execution Fix:** Diagnosed a `SQLite Error 1: 'table "ClickEvents" already exists'` race condition caused by xUnit's default parallel test execution. Refactored `CustomWebApplicationFactory.cs` to isolate tests by dynamically generating a unique database file name (`urlshortener.functionaltests.{Guid}.db`) for each test class instance, guaranteeing zero test cross-talk.
   - **URI Normalization Fix:** Fixed a test assertion failure in `AnalyticsEndpointTests` where the `HttpClient`'s `Referer` header was normalized to include a trailing slash (e.g., `https://bing.com/`).
   - **Coverage Reporting:** Utilized `dotnet test --collect:"XPlat Code Coverage"` and `reportgenerator` to parse the Cobertura XML files, verifying an aggregate line coverage of **87.5%** (308 covered lines out of 352).
-- **Your Audit Decision:** Pending
+- **Your Audit Decision:** Pending then accepted
 - **Engineering Rationale:**
   1. **CI/CD Readiness:** Solving the parallel database locking issue directly at the factory level (via GUIDs) ensures the test suite runs blazingly fast and without flakiness on any environment, avoiding the need to forcefully disable xUnit parallelization.
   2. **Coverage Visibility:** Generating combined XML coverage metrics provides empirical proof of the system's robustness, verifying that the new minimal APIs and the background `AnalyticsProcessingWorker` are thoroughly integrated and working properly.
+
+---
+
+### Entry 12
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Implement OWASP API Security Top 10 (2023) hardening across the URL Shortener, specifically targeting API7:2023 (Server-Side Request Forgery) and API10:2023 (Unsafe Consumption of APIs). Four features requested:
+  1. **High-Concurrency Custom Alias Management:** Wrap `SaveChangesAsync` in `try-catch(DbUpdateException)` to catch unique index violations on concurrent duplicate alias claims, returning structured HTTP 409 Conflict with ProblemDetails. Do not rely solely on the `AnyAsync` pre-check (TOCTOU race condition).
+  2. **Malicious URL & SSRF Validation Guardrail:** Create `UrlSafetyValidator.cs` in `UrlShortener.Core/Validation/` using native `System.Uri` parsing. Reject non-http/https schemes, loopback addresses (`127.0.0.0/8`, `localhost`, `::1`), RFC 1918 private IPs (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local/cloud metadata endpoints (`169.254.0.0/16`, including `169.254.169.254`), and IPv6-mapped IPv4 variants. Return structured reason codes.
+  3. **Sliding-Window Rate Limiter Middleware:** In-memory, zero external dependencies. Max 30 requests/minute per client IP. Return HTTP 429 with `Retry-After` header on threshold breach.
+  4. **Unsafe API Consumption Guardrails:** Harden any outbound `HttpClient` usage with `AllowAutoRedirect = false`, strict timeouts, and max response size limits.
+- **AI Output:**
+  - **`implementation_plan.md`:** Delivered a comprehensive plan covering all four features. Recommended **deferring Feature 4** to documentation-only since the current codebase has no outbound `HttpClient` consumers — the 302 redirect delegates fetching to the browser, not the server. Implementing a hardened `HttpClient` factory now would be speculative infrastructure with no caller. Proposed documenting the outbound HTTP policy in `ARCHITECTURE_PLAN.md` as a ready-to-implement contract. Included a full test matrix (~25-30 new test cases) covering SSRF rejection, rate limiting, concurrent alias conflicts, and ProblemDetails validation.
+- **Your Audit Decision:** Pending
+- **Engineering Rationale:**
+  1. **TOCTOU Defense-in-Depth:** The `AnyAsync` pre-check is retained as a fast-path optimization, but the unique index on `ShortCode` via `DbUpdateException` catch is the authoritative concurrency control. This eliminates the race window entirely without requiring distributed locks.
+  2. **SSRF Kill Chain:** Validating URLs at the Core layer (not just the API layer) ensures that any future entry point (CLI, message queue, scheduled import) inherits the same SSRF protection without code duplication.
+  3. **Rate Limiter Scope:** The in-memory sliding window is a deliberate design choice for single-instance deployments. The plan documents the known limitation that it is per-process and non-durable, requiring Redis/Memcached backing for horizontal scaling.
+  4. **Feature 4 Deferral:** Implementing speculative infrastructure violates YAGNI and inflates the attack surface (more code = more bugs). The policy is documented so it can be implemented the moment a consumer is introduced.

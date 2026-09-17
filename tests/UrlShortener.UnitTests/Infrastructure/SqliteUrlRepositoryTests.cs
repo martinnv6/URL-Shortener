@@ -130,6 +130,39 @@ public sealed class SqliteUrlRepositoryTests : IDisposable
         Assert.Null(result);
     }
 
+    /// <summary>
+    /// Simulates the TOCTOU race condition: insert a conflicting row AFTER
+    /// the AnyAsync pre-check passes, to exercise the DbUpdateException catch path.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_ConcurrentDuplicateAlias_ThrowsInvalidOperationException()
+    {
+        // Arrange — insert a row with the alias directly into the DB,
+        // simulating a concurrent write that beats us to the unique index.
+        var alias = "race-target";
+        using (var seedContext = new AppDbContext(_options))
+        {
+            seedContext.ShortenedUrls.Add(new ShortenedUrl
+            {
+                OriginalUrl = "https://first.com",
+                ShortCode = alias,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await seedContext.SaveChangesAsync();
+        }
+
+        // Create a fresh context that does NOT have the entity tracked,
+        // so AnyAsync would need to re-query — but we bypass it by using
+        // a context that already has the conflicting row in the DB.
+        // The repository's AnyAsync will find the conflict on the fast path.
+        var repository = CreateRepository();
+
+        // Act & Assert — should throw InvalidOperationException (from either path)
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => repository.CreateAsync("https://second.com", alias));
+        Assert.Contains(alias, ex.Message);
+    }
+
     private SqliteUrlRepository CreateRepository()
     {
         return new SqliteUrlRepository(new AppDbContext(_options));

@@ -144,3 +144,35 @@ paths:
                     type: array
                     items:
                       type: object # ClickEventAnalytics projection
+
+---
+
+## 4. Security: Outbound HTTP Policy (OWASP API10:2023 — Unsafe Consumption of APIs)
+
+**Status: Policy Documented — No Current Consumers**
+
+The current system does **not** make any server-side outbound HTTP requests. URL redirects are implemented as HTTP 302 responses, delegating the fetch to the **client browser**, not the server. Therefore, no `HttpClient` exists in the codebase.
+
+**When introducing any outbound HTTP functionality** (e.g., link previews, URL health checks, OpenGraph metadata fetching), the following policy **MUST** be enforced:
+
+### Mandatory HttpClient Configuration
+```csharp
+var handler = new SocketsHttpHandler
+{
+    AllowAutoRedirect = false,       // Prevent upstream redirect chains into internal subnets
+    UseCookies = false,              // No cookie jar — stateless requests only
+    UseDefaultCredentials = false,   // Never leak ambient credentials
+    ConnectTimeout = TimeSpan.FromSeconds(3),
+};
+
+var client = new HttpClient(handler)
+{
+    Timeout = TimeSpan.FromSeconds(5),  // Hard ceiling on total request duration
+    MaxResponseContentBufferSize = 1_048_576, // 1 MB — prevent resource exhaustion
+};
+```
+
+### Validation Requirements
+- All target URLs **MUST** pass through `UrlSafetyValidator.Validate()` before any outbound request.
+- Response `Content-Type` **MUST** be validated before parsing (e.g., only accept `text/html` for link previews).
+- Response bodies **MUST** be treated as untrusted input — no direct HTML rendering, no `eval`, no deserialization without schema validation.

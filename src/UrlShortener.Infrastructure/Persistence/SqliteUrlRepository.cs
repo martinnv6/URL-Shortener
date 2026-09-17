@@ -15,6 +15,11 @@ namespace UrlShortener.Infrastructure.Persistence;
 ///
 /// This preserves the deterministic Base62 encoding from the in-memory implementation
 /// while leveraging the database's identity column for thread-safe ID generation.
+///
+/// OWASP API7:2023 — Concurrency-safe alias management:
+/// The unique index on ShortCode is the authoritative enforcement mechanism.
+/// AnyAsync is retained as a fast-path optimization, but a DbUpdateException
+/// catch around SaveChangesAsync handles the TOCTOU race condition.
 /// </summary>
 public sealed class SqliteUrlRepository : IUrlRepository
 {
@@ -42,7 +47,7 @@ public sealed class SqliteUrlRepository : IUrlRepository
     {
         if (customAlias is not null)
         {
-            // Check for alias conflicts before inserting.
+            // Fast-path pre-check (non-authoritative — subject to TOCTOU race).
             var exists = await _context.ShortenedUrls
                 .AnyAsync(u => u.ShortCode == customAlias, cancellationToken);
 
@@ -64,8 +69,17 @@ public sealed class SqliteUrlRepository : IUrlRepository
 
         _context.ShortenedUrls.Add(entity);
 
-        // Phase 1: Insert to obtain the auto-incremented Id.
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            // Phase 1: Insert to obtain the auto-incremented Id.
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            // Authoritative catch: unique index violation under concurrent writes.
+            throw new InvalidOperationException(
+                $"Short code '{customAlias}' already exists. Custom aliases must be unique.", ex);
+        }
 
         if (customAlias is null)
         {
@@ -75,5 +89,17 @@ public sealed class SqliteUrlRepository : IUrlRepository
         }
 
         return entity;
+    }
+
+    /// <summary>
+    /// Detects whether a DbUpdateException was caused by a UNIQUE constraint violation.
+    /// SQLite error codes: SQLITE_CONSTRAINT (19), SQLITE_CONSTRAINT_UNIQUE (2067).
+    /// </summary>
+    private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+    {
+        // Microsoft.Data.Sqlite wraps errors as SqliteException.
+        // We check the message to avoid a hard dependency on the Sqlite package from this layer.
+        return ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx
+            && (sqliteEx.SqliteErrorCode == 19 || sqliteEx.SqliteExtendedErrorCode == 2067);
     }
 }

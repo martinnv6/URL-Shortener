@@ -1,0 +1,90 @@
+# Walkthrough — OWASP API Security Hardening
+
+## Summary
+
+Implemented four security features targeting OWASP API Security Top 10 (2023), with comprehensive unit and functional tests. **96 total tests pass, 87.2% line coverage.**
+
+---
+
+## Changes Made
+
+### Feature 1: High-Concurrency Custom Alias Management
+
+#### [SqliteUrlRepository.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener/Infrastructure/Persistence/SqliteUrlRepository.cs)
+- **Wrapped** `SaveChangesAsync` in `try-catch(DbUpdateException)` to catch UNIQUE constraint violations (SQLite error codes 19/2067).
+- Retained `AnyAsync` as fast-path optimization; the unique index is now the authoritative enforcement.
+- On `DbUpdateException`, re-throws as `InvalidOperationException` with the same message format as the pre-check path.
+
+#### [UrlEndpoints.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Endpoints/UrlEndpoints.cs)
+- 409 Conflict responses now use RFC 7807 `ProblemDetails` via `Results.Problem()` with `title: "Alias Conflict"`.
+- Added `.ProducesProblem(StatusCodes.Status409Conflict)` to endpoint metadata.
+
+---
+
+### Feature 2: SSRF Validation Guardrail
+
+#### [NEW] [UrlSafetyValidator.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Core/Validation/UrlSafetyValidator.cs)
+Pure static class in Core layer. Validates URLs against:
+1. **Scheme**: Only `http://` and `https://` allowed
+2. **Loopback**: `127.0.0.0/8`, `localhost`, `::1`
+3. **Private networks**: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
+4. **Link-local**: `169.254.0.0/16` (cloud metadata: `169.254.169.254`)
+5. **IPv6 link-local**: `fe80::/10`
+6. **IPv6-mapped IPv4**: `::ffff:x.x.x.x` → mapped address validated
+
+Also validates custom aliases: `[a-zA-Z0-9\-_]{1,15}` via `[GeneratedRegex]`.
+
+#### [UrlEndpoints.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Endpoints/UrlEndpoints.cs)
+- Replaced inline `Uri.TryCreate` + scheme check with `UrlSafetyValidator.Validate()`.
+- Added `UrlSafetyValidator.ValidateCustomAlias()` call before service dispatch.
+- Error responses include `reasonCode` for machine-readable classification.
+
+---
+
+### Feature 3: Sliding-Window Rate Limiter
+
+#### [NEW] [SlidingWindowRateLimiterMiddleware.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Middleware/SlidingWindowRateLimiterMiddleware.cs)
+- `ConcurrentDictionary<string, ConcurrentQueue<DateTime>>` keyed by client IP.
+- Drains expired entries on each request, checks count against threshold (30/minute).
+- Returns 429 with `Retry-After` header.
+- Periodic cleanup timer (every 5 minutes) removes stale IP entries.
+
+#### [Program.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Program.cs)
+- Registered via `app.UseMiddleware<SlidingWindowRateLimiterMiddleware>()` before endpoint mapping.
+
+---
+
+### Feature 4: Outbound HTTP Policy (Documentation Only)
+
+#### [ARCHITECTURE_PLAN.md](file:///c:/Repos/URL-Shortener/ARCHITECTURE_PLAN.md)
+- Added Section 4: "Security: Outbound HTTP Policy (OWASP API10:2023)"
+- Documents mandatory `HttpClient` configuration (`AllowAutoRedirect = false`, 5s timeout, 1 MB max) for future link preview features.
+
+---
+
+## Tests
+
+| Project | Tests | Status |
+|---|---|---|
+| **UrlShortener.UnitTests** | 75 | ✅ All passing |
+| **UrlShortener.FunctionalTests** | 21 | ✅ All passing |
+| **Total** | **96** | ✅ **100% pass rate** |
+
+### New Test Files
+- [`UrlSafetyValidatorTests.cs`](file:///c:/Repos/URL-Shortener/tests/UrlShortener.UnitTests/Validation/UrlSafetyValidatorTests.cs) — 28 test cases (SSRF vectors + alias validation)
+- [`SlidingWindowRateLimiterTests.cs`](file:///c:/Repos/URL-Shortener/tests/UrlShortener.UnitTests/Middleware/SlidingWindowRateLimiterTests.cs) — 5 test cases (under/over limit, IP isolation, window sliding)
+- [`SecurityEndpointTests.cs`](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/Endpoints/SecurityEndpointTests.cs) — 7 test cases (SSRF rejection, alias validation, ProblemDetails 409)
+- [`RateLimiterEndpointTests.cs`](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/Endpoints/RateLimiterEndpointTests.cs) — 1 test case (429 with Retry-After header)
+
+### Coverage
+```
+Line coverage:   87.2% (601 / 689)
+Branch coverage: 75.0% (162 / 216)
+Method coverage: 86.2% (75 / 87)
+```
+
+| Assembly | Coverage |
+|---|---|
+| UrlShortener.Api | 91.1% |
+| UrlShortener.Core | 87.3% |
+| UrlShortener.Infrastructure | 83.8% |
