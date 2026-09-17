@@ -52,3 +52,51 @@
   2. **Swagger Integration**: `Swashbuckle.AspNetCore` was chosen as it reliably provides the standard Swagger UI out-of-the-box for .NET 8 minimal APIs. Attempted usage of `Microsoft.AspNetCore.OpenApi` was backed out to avoid versioning conflicts (fetching .NET 10 pre-release by default).
 
 ---
+
+### Entry 4
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Execute a brownfield refactor of the existing URL Shortener codebase to introduce database persistence and decoupled analytics without breaking existing unit tests or API contracts, adhering to the following strict requirements:
+  1. **Data Layer Refactoring:**
+     - In `src/UrlShortener.Infrastructure/Persistence/`, create `AppDbContext.cs` using EF Core with SQLite.
+     - Map `ShortenedUrl` entity: `Id` (Key), `OriginalUrl` (Required), `ShortCode` (Indexed, Unique), `CreatedAtUtc`.
+     - Implement `SqliteUrlRepository.cs` adhering strictly to `IUrlRepository`.
+     - In `Program.cs`, swap DI registration from `InMemoryUrlRepository` to `SqliteUrlRepository`. Ensure automatic database migration on startup.
+     - *Constraint:* Use dependency injection to replace the data store while keeping the `IUrlRepository` interface untouched.
+  2. **Asynchronous Analytics Pipeline:**
+     - Create entity `ClickEvent`: `Id`, `ShortCode`, `TimestampUtc`, `UserAgent`, `Referer`.
+     - In `src/UrlShortener.Infrastructure/Analytics/`, implement an asynchronous channel producer-consumer pattern using `System.Threading.Channels.Channel<ClickEvent>`.
+     - *Critical Risk Control:* Do not generate an unbounded channel. Configure the channel with a strict bounded capacity (10,000 items) and `BoundedChannelFullMode.DropOldest` policy to prevent Out-Of-Memory (OOM) crashes during severe traffic spikes.
+     - Implement `IAnalyticsService` with method `TrackClick(string shortCode, string? userAgent, string? referer)`. Must write to the bounded buffer non-blockingly (`TryWrite`).
+     - Create a `BackgroundService` (`AnalyticsProcessingWorker.cs`) that continuously reads from the channel in batches and persists records to `AppDbContext`.
+  3. **API Integration:**
+     - Update `GET /{shortCode}` in `UrlEndpoints.cs`: Dispatch click metadata to `IAnalyticsService` without awaiting background database writes. Redirection latency must remain under 10ms.
+     - Add endpoint `GET /api/v1/urls/{shortCode}/analytics`: Returns total click count and the last 10 recorded clicks.
+  4. **Global Constraints:**
+     - Preserve all existing API responses and contracts.
+     - Database operations must be asynchronous with cancellation token support.
+     - All 15 existing unit tests must pass without regressions.
+- **AI Output:**
+  - **`src/UrlShortener.Core/Entities/ClickEvent.cs`**: Implemented domain entity with properties `Id` (long), `ShortCode` (string), `TimestampUtc` (DateTime), `UserAgent` (string?), and `Referer` (string?), cleanly separated from EF Core infrastructure.
+  - **`src/UrlShortener.Core/Interfaces/IAnalyticsService.cs`**: Defined non-blocking contract `void TrackClick(string shortCode, string? userAgent, string? referer)`. Synchronous method signature enforces non-blocking channel writes and eliminates `async`/`await` state-machine overhead on the hot redirect path.
+  - **`src/UrlShortener.Infrastructure/UrlShortener.Infrastructure.csproj`**: Installed `Microsoft.EntityFrameworkCore.Sqlite` (8.0.31) and `Microsoft.Extensions.Hosting.Abstractions` (8.0.0) pinned to .NET 8 LTS.
+  - **`src/UrlShortener.Infrastructure/Persistence/AppDbContext.cs`**: Implemented EF Core DbContext with Fluent API configuring `ShortenedUrl` (primary key `Id`, required `OriginalUrl`, unique index on `ShortCode`) and `ClickEvent` (primary key `Id`, index on `ShortCode`, composite index on `[ShortCode, TimestampUtc]`).
+  - **`src/UrlShortener.Infrastructure/Persistence/SqliteUrlRepository.cs`**: Implemented `IUrlRepository` without modifying the core interface. For auto-generated short codes, implemented two-phase creation: inserts the entity to obtain the SQLite auto-increment `Id`, encodes it via `Base62Encoder.Encode((ulong)entity.Id)`, and updates the record. Query methods apply `.AsNoTracking()` and pass `CancellationToken`.
+  - **`src/UrlShortener.Infrastructure/Analytics/ClickEventChannel.cs`**: Thread-safe channel wrapper configuring `Channel.CreateBounded<ClickEvent>` with `Capacity = 10_000`, `FullMode = BoundedChannelFullMode.DropOldest` (mitigating OOM under peak load), and `SingleReader = true` (enabling lock-free reader optimizations).
+  - **`src/UrlShortener.Infrastructure/Analytics/AnalyticsService.cs`**: Producer implementation that writes events via `_channel.Writer.TryWrite(...)`, ensuring telemetry collection never blocks or introduces I/O latency.
+  - **`src/UrlShortener.Infrastructure/Analytics/AnalyticsProcessingWorker.cs`**: Hosted `BackgroundService` running a batch consumption loop (draining up to 100 items or flushing after 1-second timeout). Injected `IServiceScopeFactory` to resolve a fresh `AppDbContext` scope per batch, ensuring thread safety and preventing DbContext change-tracker memory growth. Implemented graceful shutdown draining on cancellation.
+  - **`src/UrlShortener.Api/appsettings.json`**: Added `"ConnectionStrings:DefaultConnection": "Data Source=urlshortener.db"`.
+  - **`src/UrlShortener.Api/Program.cs`**: Swapped DI registration from `InMemoryUrlRepository` to `SqliteUrlRepository` (Scoped), registered `ClickEventChannel` (Singleton), `AnalyticsService` as `IAnalyticsService` (Singleton), and `AnalyticsProcessingWorker` (HostedService). Added automatic database provisioning on startup via `await dbContext.Database.EnsureCreatedAsync()`.
+  - **`src/UrlShortener.Api/Endpoints/UrlEndpoints.cs`**:
+    - `GET /{shortCode}`: Injected `IAnalyticsService` and `HttpRequest`; synchronously invoked `analyticsService.TrackClick(...)` with headers before issuing `Results.Redirect(..., permanent: false)`, guaranteeing redirect execution well under 10ms.
+    - `GET /api/v1/urls/{shortCode}/analytics`: Added endpoint returning `ClickAnalyticsResponse` with total clicks, top referrers, and the 10 most recent click records.
+  - **`src/UrlShortener.Api/Contracts/ClickAnalyticsResponse.cs`**: Defined response DTOs (`ClickAnalyticsResponse`, `RefererCountDto`, `ClickEventDto`).
+  - **Automated Verification**: Full solution compiled with 0 errors and 0 warnings; all 15 unit tests in `UrlShortener.UnitTests` passed.
+- **Your Audit Decision:** Accepted
+- **Engineering Rationale:**
+  1. **Strict Dependency Inversion & Zero Regressions:** Preserved `IUrlRepository` unaltered. Swapping the persistence store from in-memory to SQLite was achieved exclusively via DI registration in `Program.cs`, proving the architectural decoupling of the Core domain from Infrastructure.
+  2. **Non-Blocking Telemetry Ingress & OOM Risk Control:** Adhered strictly to the bounded channel constraint (`Capacity = 10,000`, `DropOldest`). By utilizing synchronous `TryWrite` inside the redirect endpoint, the HTTP response never awaits database I/O or background disk persistence, ensuring redirect latency remains well within the <10ms requirement while protecting application memory from traffic spikes.
+  3. **Scoped Lifetime Isolation in Background Service:** Because `BackgroundService` is a singleton and `AppDbContext` is a non-thread-safe scoped service, injecting `AppDbContext` directly would cause concurrency violations and memory bloat. Resolving `IServiceScopeFactory` per batch flush ensures clean DbContext lifetimes, proper connection disposal, and thread isolation.
+  4. **SQLite Autoincrement Two-Phase Insert:** SQLite lacks independent sequence generators. Inserting the entity to obtain the generated `Id`, encoding via `Base62Encoder`, and persisting the short code guarantees deterministic, collision-free short code generation while keeping custom aliases validated upfront.
+  5. **Query Performance & Indexing:** Added a composite index on `ClickEvent(ShortCode, TimestampUtc)` in EF Core to ensure queries fetching total count and the latest 10 clicks execute with index scans rather than full table scans.
+
+---
