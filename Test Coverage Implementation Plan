@@ -1,0 +1,45 @@
+# Test Coverage Implementation Plan
+
+## Goal Description
+The current test suite (`Base62EncoderTests` and `AnalyticsQueryTests`) provides approximately **26% line coverage**. While the core encoding engine is thoroughly tested, significant gaps remain in the application layer, infrastructure persistence, and analytics ingestion. The goal is to implement comprehensive unit tests to ensure application resilience and correctness.
+
+## Analysis of Functional Tests Suitability
+Functional (Integration) tests using `WebApplicationFactory<Program>` are an **excellent approach** for this project, particularly for testing the Minimal API endpoints. Since the API layer (`UrlEndpoints.cs`) is thin and relies heavily on DI, functional tests would allow us to test the HTTP routing, dependency injection configuration, and the entire request pipeline in a production-like environment (e.g., verifying that a POST to `/api/v1/urls` successfully writes to the SQLite database and returns a 200 OK, or that a GET to `/{shortCode}` correctly dispatches a click event to the channel and returns a 302 Redirect). 
+
+**Recommendation:** We should introduce a `UrlShortener.FunctionalTests` or `UrlShortener.IntegrationTests` project utilizing `Microsoft.AspNetCore.Mvc.Testing` to cover the API endpoints end-to-end, as unit testing Minimal API endpoints directly is often cumbersome and less valuable than testing the actual HTTP contracts.
+
+## User Review Required
+> [!IMPORTANT]
+> The current plan focuses on filling the unit testing gaps within the existing `UrlShortener.UnitTests` project using `Moq` for dependency isolation. If you would prefer to *also* implement the Functional Tests in this phase, please approve the plan with instructions to include the `FunctionalTests` project.
+
+## Proposed Changes
+
+### Unit Testing Gaps
+
+#### [NEW] `tests/UrlShortener.UnitTests/Services/UrlShortenerServiceTests.cs`
+- Test `ShortenUrlAsync`:
+  - Validates `ArgumentException` on invalid URLs.
+  - Mocks `IUrlRepository` to test successful URL shortening and returning the correct code.
+  - Tests handling of custom aliases (success and conflict scenarios).
+- Test `GetUrlAsync`:
+  - Validates returning a URL when it exists.
+  - Validates returning null when the shortcode is not found.
+
+#### [NEW] `tests/UrlShortener.UnitTests/Infrastructure/SqliteUrlRepositoryTests.cs`
+- Use an in-memory SQLite database (similar to `AnalyticsQueryTests`) to test actual EF Core behavior.
+- Test `AddAsync` (with and without custom aliases).
+- Test `GetByShortCodeAsync`.
+- Test auto-increment ID persistence and Base62 encoding integration.
+
+#### [NEW] `tests/UrlShortener.UnitTests/Infrastructure/Analytics/AnalyticsServiceTests.cs`
+- Mock `ClickEventChannel` to verify `TryWrite` is called correctly when `TrackClick` is invoked.
+- Ensure the `TimestampUtc` is set to UTC.
+
+#### [NEW] `tests/UrlShortener.UnitTests/Infrastructure/Analytics/ClickEventChannelTests.cs`
+- Validate bounded capacity behavior (ensure `DropOldest` is respected when full).
+- Test concurrent writes.
+
+## Verification Plan
+### Automated Tests
+- Run `dotnet test /p:CollectCoverage=true` to verify that coverage increases significantly across `UrlShortener.Core` and `UrlShortener.Infrastructure`.
+- Ensure all tests pass.
