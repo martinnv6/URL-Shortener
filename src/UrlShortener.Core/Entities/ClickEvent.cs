@@ -14,7 +14,7 @@ public sealed class ClickEvent
     public required string ShortCode { get; set; }
 
     /// <summary>UTC timestamp of the click event.</summary>
-    public DateTimeOffset TimestampUtc { get; set; }
+    public DateTime TimestampUtc { get; set; }
 
     /// <summary>Browser/client user agent string.</summary>
     public string? UserAgent { get; set; }

@@ -28,7 +28,7 @@ public sealed class AnalyticsService : IAnalyticsService
         {
             Id = Guid.NewGuid(),
             ShortCode = shortCode,
-            TimestampUtc = DateTimeOffset.UtcNow,
+            TimestampUtc = DateTime.UtcNow,
             UserAgent = userAgent,
             Referer = referer
         };
