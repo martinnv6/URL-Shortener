@@ -55,3 +55,9 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# SQLite Databases
+*.db
+*.db-shm
+*.db-wal
+urlshortener.functionaltests.db*

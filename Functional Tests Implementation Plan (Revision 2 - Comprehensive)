@@ -1,0 +1,210 @@
+# Functional Tests Implementation Plan (Revision 2 - Comprehensive)
+
+## Goal Description
+Implement a robust, production-safe functional test suite (`UrlShortener.FunctionalTests`) utilizing `Microsoft.AspNetCore.Mvc.Testing` and `WebApplicationFactory<Program>`. 
+
+This comprehensive Revision 2 incorporates all human audit feedback and safeguards:
+1. **Production & Environment Protection:** Ensures the test suite never touches, mutates, or corrupts production, staging, or local developer databases (`urlshortener.db`). It introduces an isolated SQLite database file (`urlshortener.functionaltests.db`) with a dedicated connection string, explicit environment overrides (`Testing`), and automatic database cleanup.
+2. **End-to-End Asynchronous Analytics Pipeline:** Tests the complete telemetry lifecycle (HTTP Redirect -> `ClickEventChannel` -> `AnalyticsProcessingWorker` -> `AppDbContext` -> `GET /analytics`) using asynchronous polling to verify eventual consistency and detailed click metadata (User-Agent, Referer, UTC timestamps).
+3. **Redirect Protocol Compliance (`AllowAutoRedirect = false`):** Enforces non-redirecting `HttpClient` configurations to accurately assert `302 Found` status codes and `Location` headers without triggering external outbound network calls.
+4. **Exhaustive Contract & Edge Case Coverage:** Validates all Minimal API routes, custom alias conflicts, URI scheme restrictions, and error response contracts.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Production Database Protection Guarantee:**
+> - Production/dev database: `src/UrlShortener.Api/urlshortener.db`
+> - Functional test database: `urlshortener.functionaltests.db` (connection string: `Data Source=urlshortener.functionaltests.db`)
+> - `CustomWebApplicationFactory` overrides `ConnectionStrings:DefaultConnection` before the host is built. Under no circumstances will tests connect to `urlshortener.db`.
+> - SQLite database files (`*.db`, `*.db-shm`, `*.db-wal`) will be added to [.gitignore](file:///c:/Repos/URL-Shortener/.gitignore) to prevent test or local data files from ever being committed to source control.
+
+> [!IMPORTANT]
+> **`Program.cs` Entry Point Exposure:**
+> Minimal API top-level statements require adding `public partial class Program {}` at the end of [Program.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Program.cs) so that `WebApplicationFactory<Program>` can discover the application entry point.
+
+---
+
+## Key Design Architecture (Revision 2)
+
+### 1. Database Isolation & Lifecycle Strategy
+```mermaid
+flowchart LR
+    subgraph TestEnvironment [Test Host - Environment: Testing]
+        WAF[CustomWebApplicationFactory]
+        TestConfig["ConnectionStrings:DefaultConnection\n= Data Source=urlshortener.functionaltests.db"]
+        TestDB[("urlshortener.functionaltests.db\n(Created on Init, Deleted on Dispose)")]
+    end
+
+    subgraph ProductionEnvironment [Protected Environment]
+        ProdDB[("urlshortener.db\n(NEVER TOUCHED)")]
+    end
+
+    WAF --> TestConfig
+    TestConfig --> TestDB
+```
+
+- **Configuration Override:** In `CustomWebApplicationFactory.ConfigureWebHost`:
+  - Sets `builder.UseEnvironment("Testing")`.
+  - Injects `ConnectionStrings:DefaultConnection = "Data Source=urlshortener.functionaltests.db"` into the host configuration via `ConfigureAppConfiguration`.
+- **Database Lifecycle:**
+  - `InitializeAsync()`: Ensures `urlshortener.functionaltests.db` is deleted if an orphaned instance exists from a previous run, then executes `EnsureCreatedAsync()`.
+  - `DisposeAsync()` / `Dispose()`: Closes all active connections and cleans up `urlshortener.functionaltests.db` and any `-shm`/`-wal` companion files.
+- **Safety Assertions:** Tests can assert that the active connection string does NOT contain `urlshortener.db`.
+
+### 2. Asynchronous Analytics Pipeline Verification Strategy
+The analytics pipeline is decoupled via `System.Threading.Channels`:
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Test as Functional Test Runner
+    participant API as UrlEndpoints (GET /{shortCode})
+    participant Channel as ClickEventChannel (Bounded Buffer)
+    participant Worker as AnalyticsProcessingWorker (HostedService)
+    participant DB as AppDbContext (urlshortener.functionaltests.db)
+    participant Analytics as UrlEndpoints (GET /analytics)
+
+    Test->>API: GET /{shortCode} (User-Agent: Runner/1.0, Referer: https://ref.com)
+    API->>Channel: TryWrite(clickEvent)
+    API-->>Test: 302 Found (Location: https://example.com)
+    Note over Test: Redirect received immediately (<10ms)
+    
+    par Async Worker Loop
+        Worker->>Channel: ReadAllAsync() batch
+        Worker->>DB: AddRangeAsync(clicks) & SaveChangesAsync()
+    end
+
+    loop Polling Helper (every 50ms up to 3s)
+        Test->>Analytics: GET /api/v1/urls/{shortCode}/analytics
+        Analytics->>DB: Query totalClicks, topReferers, recentClicks
+        Analytics-->>Test: 200 OK (ClickAnalyticsResponse)
+    end
+    Note over Test: Assert totalClicks == 1, UserAgent == "Runner/1.0", Referer == "https://ref.com"
+```
+
+- A polling assertion helper `WaitForAnalyticsAsync(string shortCode, Func<ClickAnalyticsResponse, bool> condition, TimeSpan timeout)` queries the analytics endpoint with a short interval (50ms) up to a 3-second ceiling. This tests the real asynchronous pipeline deterministically without arbitrary thread sleep delays.
+
+### 3. Non-Auto-Redirecting HTTP Client
+- Testing HTTP 302 requires preventing the `HttpClient` from automatically executing an outbound HTTP GET to the target URL.
+- `CustomWebApplicationFactory` exposes:
+  ```csharp
+  public HttpClient CreateNonRedirectingClient() =>
+      CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+  ```
+- All redirect assertions verify:
+  - `response.StatusCode == HttpStatusCode.Found` (302).
+  - `response.Headers.Location.ToString() == expectedOriginalUrl`.
+
+---
+
+## Proposed Changes
+
+---
+
+### Project Configuration & Environment Safeguards
+
+#### [NEW] [UrlShortener.FunctionalTests.csproj](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/UrlShortener.FunctionalTests.csproj)
+Targeting `net8.0` with the following dependencies:
+- `Microsoft.AspNetCore.Mvc.Testing` (`8.0.13`)
+- `Microsoft.NET.Test.Sdk` (`17.14.1`)
+- `xunit` (`2.9.3`) and `xunit.runner.visualstudio` (`3.1.4`)
+- `coverlet.collector` (`6.0.4`)
+- Project References:
+  - [UrlShortener.Api.csproj](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/UrlShortener.Api.csproj)
+  - [UrlShortener.Core.csproj](file:///c:/Repos/URL-Shortener/src/UrlShortener.Core/UrlShortener.Core.csproj)
+  - [UrlShortener.Infrastructure.csproj](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/UrlShortener.Infrastructure.csproj)
+
+#### [MODIFY] [.gitignore](file:///c:/Repos/URL-Shortener/.gitignore)
+Add SQLite database patterns to ensure neither developer databases nor test artifacts are ever committed:
+```gitignore
+# SQLite Databases
+*.db
+*.db-shm
+*.db-wal
+urlshortener.functionaltests.db*
+```
+
+#### [MODIFY] [UrlShortener.slnx](file:///c:/Repos/URL-Shortener/UrlShortener.slnx)
+Register `tests/UrlShortener.FunctionalTests/UrlShortener.FunctionalTests.csproj` under the `/tests/` solution folder.
+
+#### [MODIFY] [Program.cs](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Program.cs)
+Append `public partial class Program {}` to expose `Program` to `WebApplicationFactory<Program>`.
+
+---
+
+### Test Infrastructure
+
+#### [NEW] [CustomWebApplicationFactory.cs](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/CustomWebApplicationFactory.cs)
+- Configures `"Testing"` environment.
+- Points `ConnectionStrings:DefaultConnection` to `"Data Source=urlshortener.functionaltests.db"`.
+- Implements `IAsyncLifetime`:
+  - `InitializeAsync()`: Deletes any old test db file, then runs `EnsureCreatedAsync()`.
+  - `DisposeAsync()`: Cleans up the test database file.
+- Provides `CreateNonRedirectingClient()`.
+- Implements `WaitForAnalyticsAsync(...)` polling helper.
+
+---
+
+### Test Suites
+
+#### [NEW] [CreateUrlEndpointTests.cs](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/Endpoints/CreateUrlEndpointTests.cs)
+Tests `POST /api/v1/urls`:
+- **Auto-generated code:** Returns `201 Created`, valid `shortCode`, `shortUrl`, matching `originalUrl`.
+- **Custom alias:** Returns `201 Created` with custom alias.
+- **Custom alias conflict:** Creating the same alias twice returns `409 Conflict`.
+- **Validation:** Empty string URL returns `400 Bad Request`.
+- **Validation:** Malformed / relative URL (e.g., `"not-a-url"`) returns `400 Bad Request`.
+- **Validation:** Unsupported scheme (e.g., `"ftp://files.example.com"`) returns `400 Bad Request`.
+
+#### [NEW] [RedirectEndpointTests.cs](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/Endpoints/RedirectEndpointTests.cs)
+Tests `GET /{shortCode}`:
+- **Valid redirect:** Returns `302 Found` with exact `Location` header; does not follow redirect.
+- **Missing short code:** Returns `404 Not Found`.
+- **Telemetry headers:** Verifies request with `User-Agent` and `Referer` succeeds with 302 and low latency.
+
+#### [NEW] [AnalyticsEndpointTests.cs](file:///c:/Repos/URL-Shortener/tests/UrlShortener.FunctionalTests/Endpoints/AnalyticsEndpointTests.cs)
+Tests `GET /api/v1/urls/{shortCode}/analytics`:
+- **Zero clicks:** Newly created URL returns `200 OK` with `totalClicks = 0`, empty `topReferers`, empty `recentClicks`.
+- **Missing short code:** Returns `404 Not Found`.
+- **End-to-End Pipeline Roundtrip:**
+  1. POST URL to create short code.
+  2. GET redirect with `User-Agent = "IntegrationTestRunner/2.0"` and `Referer = "https://github.com/martinnv6/URL-Shortener"`.
+  3. Poll `WaitForAnalyticsAsync` until `totalClicks == 1`.
+  4. Assert `totalClicks == 1`.
+  5. Assert `topReferers` contains `"https://github.com/martinnv6/URL-Shortener"` with count 1.
+  6. Assert `recentClicks[0]` has expected `UserAgent`, `Referer`, and UTC timestamp within the last minute.
+- **Multiple Clicks & Aggregation:**
+  - Simulates 3 additional clicks across multiple distinct referrers.
+  - Awaits worker processing (`totalClicks == 4`).
+  - Verifies referrer ranking aggregation (descending count) and chronological order of recent clicks.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```powershell
+# 1. Solution compilation check
+dotnet build
+
+# 2. Run all unit and functional tests
+dotnet test --logger:"console;verbosity=normal"
+
+# 3. Code coverage assessment
+dotnet test --collect:"XPlat Code Coverage"
+```
+
+### Safety & Environment Verification
+```powershell
+# Verify production/dev DB was NEVER touched (last write time must be unchanged)
+Get-Item src/UrlShortener.Api/urlshortener.db | Select-Object Name, LastWriteTime, Length
+
+# Verify test DB was cleaned up or isolated
+Test-Path urlshortener.functionaltests.db
+```
+
+### Success Criteria
+- All 27 existing unit tests + all new functional tests pass (100% pass rate).
+- Production database `src/UrlShortener.Api/urlshortener.db` is completely untouched.
+- Code coverage jumps significantly beyond the previous 56.69%, closing the API layer gap.

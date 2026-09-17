@@ -141,8 +141,66 @@
   - **Coverage Validation:** Re-ran `dotnet test --collect:"XPlat Code Coverage"`. The new test run successfully completed with 27 passing tests.
   - **Metrics:** Line coverage increased from 25.98% to **56.69%**. Branch coverage increased to 36%.
   - **Analysis:** The `UrlShortener.Core` and `UrlShortener.Infrastructure` classes targeted by the new tests are now properly covered. The remaining ~43% of uncovered code resides almost entirely in the `UrlShortener.Api` project (Minimal API endpoints in `UrlEndpoints.cs` and DI setup in `Program.cs`), as well as the background `AnalyticsProcessingWorker`. As noted in Entry 6, these are best validated via `FunctionalTests` using `WebApplicationFactory` rather than brittle unit tests.
-- **Your Audit Decision:** Pending
+- **Your Audit Decision:** Accepted
 - **Engineering Rationale:**
   1. **Progressive Testing Strategy:** Achieved robust unit testing coverage for the core domain and infrastructure adapters first. This lays the foundation of confidence before moving up the stack to integration testing the HTTP endpoints.
 
 ---
+
+### Entry 8
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Implement functional tests to increase test coverage across the API endpoints and HTTP pipeline (requesting an implementation plan).
+- **AI Output:**
+  - **Initial Implementation Plan:** Formulated an initial implementation plan for a new `UrlShortener.FunctionalTests` project using `Microsoft.AspNetCore.Mvc.Testing` and `WebApplicationFactory<Program>`. Proposed tests for basic endpoint status codes (POST create, GET redirect, GET analytics with 0 clicks) using a naive SQLite in-memory configuration (`DataSource=:memory:`), while explicitly deeming asynchronous analytics pipeline verification as "out of scope".
+- **Your Audit Decision:** Rejected
+- **Engineering Rationale:**
+  1. **Asynchronous Analytics Pipeline Verification:** Deferring analytics verification to "out of scope" was rejected. The core architectural feature of this application is the decoupled producer-consumer channel (`ClickEventChannel` -> `AnalyticsProcessingWorker` -> `AppDbContext`). Functional tests must validate this asynchronous pipeline end-to-end: triggering redirects with custom `User-Agent` and `Referer` headers, allowing the background worker to drain the channel, and asserting that `GET /api/v1/urls/{shortCode}/analytics` reflects the updated click count, top referrers, and detailed history.
+  2. **Production/Deployed Database Protection & Isolated Test Database File:** To guarantee that production, staging, and local developer databases (`urlshortener.db`) are strictly shielded against test data pollution or corruption, tests must never bind to default connection strings. Functional testing requires an isolated test database strategy — either an isolated physical SQLite file (e.g., `urlshortener.functionaltests.db`) with a dedicated connection string, or a managed in-memory connection overridden via `ConfigureAppConfiguration` and `builder.UseEnvironment("Testing")`. Furthermore, SQLite database artifacts (`*.db`, `*.db-shm`, `*.db-wal`) must be gitignored.
+  3. **HTTP Redirect Assertion Safeguards:** Default `HttpClient` instances automatically follow HTTP 302 redirects, which would trigger external network requests to target URLs instead of asserting the API redirect behavior. The test suite must configure `AllowAutoRedirect = false` on `WebApplicationFactoryClientOptions` to accurately inspect the HTTP 302 status code and the `Location` header.
+
+---
+
+### Entry 9
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Formulate a comprehensive Revision 2 of the functional tests implementation plan incorporating all improvements prior to test implementation, specifically ensuring that production and deployed environments are safeguarded at all times by utilizing a dedicated database file (`urlshortener.functionaltests.db`) and its connection string for functional testing.
+- **AI Output:**
+  - **`implementation_plan.md` (Revision 2 - Comprehensive):** Delivered a comprehensive implementation plan detailing:
+    1. **Production & Environment Protection:** Configured `CustomWebApplicationFactory` to use `builder.UseEnvironment("Testing")` and override `ConnectionStrings:DefaultConnection` to point exclusively to a dedicated test database file (`urlshortener.functionaltests.db`), isolating it completely from `src/UrlShortener.Api/urlshortener.db`. Added SQLite database ignore patterns (`*.db`, `*.db-shm`, `*.db-wal`) to `.gitignore`. Implemented automated database initialization (`EnsureDeletedAsync` + `EnsureCreatedAsync`) and test file teardown on disposal.
+    2. **End-to-End Asynchronous Analytics Verification:** Defined integration tests that exercise the complete telemetry lifecycle: issuing `GET /{shortCode}` redirects with custom `User-Agent` and `Referer` headers, and utilizing an asynchronous polling assertion helper (`WaitForAnalyticsAsync`) to verify eventual consistency when querying `GET /api/v1/urls/{shortCode}/analytics` (validating total clicks, top referrers, and detailed click events with UTC timestamps).
+    3. **HTTP 302 Non-Redirecting Client:** Configured `CreateNonRedirectingClient()` with `AllowAutoRedirect = false` to assert HTTP 302 status codes and `Location` headers directly without triggering outbound external network calls.
+    4. **Exhaustive Test Suite & Contracts:** Structured test cases across `CreateUrlEndpointTests`, `RedirectEndpointTests`, and `AnalyticsEndpointTests` covering happy paths, custom alias conflicts (409 Conflict), validation errors (400 Bad Request for empty, relative, or unsupported URI schemes), and missing resources (404 Not Found).
+- **Your Audit Decision:** Pending
+- **Engineering Rationale:**
+  1. **Defense-in-Depth Database Isolation:** Ensuring the test factory explicitly overrides the environment (`Testing`) and the connection string configuration guarantees that even in CI/CD pipelines or local development with active databases, test runs can never execute destructive schema resets or write test data into production or development databases.
+  2. **Deterministic Async Verification via Polling:** Rather than using brittle `Task.Delay` sleep calls that either cause flaky tests or slow down CI suites, a predicate-based polling loop with a ceiling timeout accurately verifies asynchronous worker queue-drain behavior and database commit latency under realistic conditions.
+  3. **Redirect Protocol Compliance:** Testing HTTP 302 responses without auto-redirect prevents tests from making external network calls to third-party domains (e.g., `https://google.com`), eliminating network-dependent test flakiness and outbound SSRF risks during testing.
+
+---
+
+### Entry 10
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Implement the Plan (Revision 2)
+- **AI Output:**
+  - **`task.md` & `walkthrough.md`**: Tracked execution and summarized functional tests completion.
+  - **`tests/UrlShortener.FunctionalTests/CustomWebApplicationFactory.cs`**: Implemented `WebApplicationFactory` configuring an isolated, dynamically generated SQLite database per factory instance (e.g., `urlshortener.functionaltests.{Guid}.db`) to resolve xUnit parallel test execution race conditions. Added database seeding and cleanup logic in `IAsyncLifetime`. Provided a `CreateNonRedirectingClient` helper and a `WaitForAnalyticsAsync` polling utility.
+  - **`tests/UrlShortener.FunctionalTests/Endpoints/*`**: Implemented `CreateUrlEndpointTests`, `RedirectEndpointTests`, and `AnalyticsEndpointTests` covering successful operations, data validation, conflict scenarios, HTTP 302 assertions, and async analytics aggregation.
+  - **`src/UrlShortener.Api/Program.cs` & `.gitignore`**: Appended `public partial class Program {}` for visibility and ignored `urlshortener.functionaltests.db*` files.
+- **Your Audit Decision:** Pending
+- **Engineering Rationale:**
+  1. **Parallel Execution Safe:** By generating a unique database filename per factory instance, test classes run safely in parallel without hitting locking or schema creation race conditions in SQLite.
+  2. **Code Coverage Impact:** End-to-End API tests dramatically elevated overall line coverage from **56.69% to 87.5%**, validating Minimal API endpoint mappings, model binding, the core service layer, and the background worker seamlessly.
+
+---
+
+### Entry 11
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Document the specific troubleshooting actions, bug fixes, and code coverage report generation performed during the functional test implementation.
+- **AI Output:**
+  - **Test Compilation Fix:** Corrected contract naming mismatches in the test assertions (`ShortenedUrlResponse` -> `CreateUrlResponse`).
+  - **SQLite Parallel Execution Fix:** Diagnosed a `SQLite Error 1: 'table "ClickEvents" already exists'` race condition caused by xUnit's default parallel test execution. Refactored `CustomWebApplicationFactory.cs` to isolate tests by dynamically generating a unique database file name (`urlshortener.functionaltests.{Guid}.db`) for each test class instance, guaranteeing zero test cross-talk.
+  - **URI Normalization Fix:** Fixed a test assertion failure in `AnalyticsEndpointTests` where the `HttpClient`'s `Referer` header was normalized to include a trailing slash (e.g., `https://bing.com/`).
+  - **Coverage Reporting:** Utilized `dotnet test --collect:"XPlat Code Coverage"` and `reportgenerator` to parse the Cobertura XML files, verifying an aggregate line coverage of **87.5%** (308 covered lines out of 352).
+- **Your Audit Decision:** Pending
+- **Engineering Rationale:**
+  1. **CI/CD Readiness:** Solving the parallel database locking issue directly at the factory level (via GUIDs) ensures the test suite runs blazingly fast and without flakiness on any environment, avoiding the need to forcefully disable xUnit parallelization.
+  2. **Coverage Visibility:** Generating combined XML coverage metrics provides empirical proof of the system's robustness, verifying that the new minimal APIs and the background `AnalyticsProcessingWorker` are thoroughly integrated and working properly.
