@@ -6,6 +6,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/UrlShortener.FunctionalTests/UrlShortener.FunctionalTests.csproj" />
+    <Project Path="tests/UrlShortener.IntegrationTests/UrlShortener.IntegrationTests.csproj" />
     <Project Path="tests/UrlShortener.UnitTests/UrlShortener.UnitTests.csproj" />
   </Folder>
 </Solution>

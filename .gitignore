@@ -61,3 +61,7 @@ nunit-*.xml
 *.db-shm
 *.db-wal
 urlshortener.functionaltests.db*
+urlshortener.integrationtests.db*
+
+# Coverage reports
+coveragereport/
