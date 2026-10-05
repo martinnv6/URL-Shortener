@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Endpoints;
+using UrlShortener.Api.Middleware;
 using UrlShortener.Core.Interfaces;
 using UrlShortener.Core.Services;
 using UrlShortener.Infrastructure.Analytics;
@@ -54,6 +55,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// OWASP: Sliding-window rate limiter — 30 requests/minute per client IP.
+app.UseMiddleware<SlidingWindowRateLimiterMiddleware>();
 
 // Map the URL shortener endpoints.
 app.MapUrlEndpoints();

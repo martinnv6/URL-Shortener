@@ -20,8 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\UrlShortener.Api\UrlShortener.Api.csproj" />
     <ProjectReference Include="..\..\src\UrlShortener.Core\UrlShortener.Core.csproj" />
     <ProjectReference Include="..\..\src\UrlShortener.Infrastructure\UrlShortener.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
 </Project>

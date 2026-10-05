@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using UrlShortener.Api.Contracts;
 using UrlShortener.Core.Interfaces;
+using UrlShortener.Core.Validation;
 using UrlShortener.Infrastructure.Persistence;
 
 namespace UrlShortener.Api.Endpoints;
@@ -17,7 +18,8 @@ public static class UrlEndpoints
         app.MapPost("/api/v1/urls", CreateShortUrl)
             .WithName("CreateShortUrl")
             .Produces<CreateUrlResponse>(StatusCodes.Status201Created)
-            .ProducesProblem(StatusCodes.Status400BadRequest);
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status409Conflict);
 
         app.MapGet("/{shortCode}", RedirectToOriginalUrl)
             .WithName("RedirectToOriginalUrl")
@@ -32,8 +34,8 @@ public static class UrlEndpoints
 
     /// <summary>
     /// POST /api/v1/urls
-    /// Validates the URL format (must be absolute URI with http/https scheme),
-    /// then delegates creation to the service layer.
+    /// Validates the URL via <see cref="UrlSafetyValidator"/> (SSRF mitigation),
+    /// validates the custom alias format, then delegates creation to the service layer.
     /// </summary>
     private static async Task<IResult> CreateShortUrl(
         CreateUrlRequest request,
@@ -41,18 +43,25 @@ public static class UrlEndpoints
         HttpRequest httpRequest,
         CancellationToken cancellationToken)
     {
-        // --- Input Validation (SSRF mitigation: only http/https allowed) ---
-        if (string.IsNullOrWhiteSpace(request.Url))
-        {
-            return Results.BadRequest(new { error = "URL is required." });
-        }
-
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        // --- SSRF Validation (OWASP API7:2023) ---
+        var urlValidation = UrlSafetyValidator.Validate(request.Url);
+        if (!urlValidation.IsValid)
         {
             return Results.BadRequest(new
             {
-                error = "Invalid URL. Must be an absolute URI with http or https scheme."
+                error = urlValidation.Detail,
+                reasonCode = urlValidation.ReasonCode
+            });
+        }
+
+        // --- Custom Alias Validation ---
+        var aliasValidation = UrlSafetyValidator.ValidateCustomAlias(request.CustomAlias);
+        if (!aliasValidation.IsValid)
+        {
+            return Results.BadRequest(new
+            {
+                error = aliasValidation.Detail,
+                reasonCode = aliasValidation.ReasonCode
             });
         }
 
@@ -71,8 +80,11 @@ public static class UrlEndpoints
         }
         catch (InvalidOperationException ex)
         {
-            // Alias conflict — return 409 Conflict.
-            return Results.Conflict(new { error = ex.Message });
+            // Alias conflict — return 409 Conflict with RFC 7807 ProblemDetails.
+            return Results.Problem(
+                detail: ex.Message,
+                title: "Alias Conflict",
+                statusCode: StatusCodes.Status409Conflict);
         }
     }
 
