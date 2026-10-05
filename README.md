@@ -43,7 +43,26 @@ An enterprise-grade, high-performance URL shortener built with .NET 8 Minimal AP
     *(The `--roll-forward Major` flag allows the .NET 8 app to run seamlessly on newer runtimes like .NET 10).*
 
 3.  **Explore the API via Swagger**:
-    Once the application is running, open your browser and navigate to the local server port provided in the terminal output (e.g., `http://localhost:5000/swagger` or `http://localhost:5038/swagger`).
+    Once the application is running, open your browser and navigate to:
+    ```
+    http://localhost:5046/swagger
+    ```
+
+4.  **Quick API Test**:
+    *   **Shorten a URL**:
+        ```bash
+        curl -X POST http://localhost:5046/api/v1/urls \
+          -H "Content-Type: application/json" \
+          -d '{"url": "https://google.com"}'
+        ```
+    *   **Redirect**:
+        ```bash
+        curl -i http://localhost:5046/1
+        ```
+    *   **Inspect Analytics**:
+        ```bash
+        curl http://localhost:5046/api/v1/urls/1/analytics
+        ```
 
 ### Running the Tests
 
