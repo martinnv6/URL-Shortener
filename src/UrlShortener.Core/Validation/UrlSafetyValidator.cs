@@ -41,7 +41,8 @@ public static partial class UrlSafetyValidator
         }
 
         // ── Step 2: Parse with native Uri class ──
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        // On Unix-like systems, Uri.TryCreate with UriKind.Absolute parses strings starting with '/' as file:/// URIs.
+        if (url.StartsWith('/') || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
             return UrlValidationResult.Invalid("INVALID_URL", "URL must be a valid absolute URI.");
         }

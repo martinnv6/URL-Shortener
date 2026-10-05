@@ -33,7 +33,7 @@ public class IsolatedWebApplicationFactory : WebApplicationFactory<Program>, IAs
     public IsolatedWebApplicationFactory()
     {
         _dbFileName = $"urlshortener.integrationtests.{Guid.NewGuid()}.db";
-        _connectionString = $"Data Source={_dbFileName}";
+        _connectionString = $"Data Source={_dbFileName};Default Timeout=30;Mode=ReadWriteCreate;";
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

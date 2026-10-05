@@ -66,10 +66,12 @@ An enterprise-grade, high-performance URL shortener built with .NET 8 Minimal AP
 
 ### Running the Tests
 
-To execute the comprehensive test suite (Unit and Integration tests), run:
+To execute the comprehensive test suite across all projects:
 ```bash
-dotnet test --roll-forward Major
+dotnet test
 ```
+
+*(Or explicitly with the local .NET 8 SDK: `~/.dotnet/dotnet test tests/UrlShortener.UnitTests/UrlShortener.UnitTests.csproj && ~/.dotnet/dotnet test tests/UrlShortener.IntegrationTests/UrlShortener.IntegrationTests.csproj && ~/.dotnet/dotnet test tests/UrlShortener.FunctionalTests/UrlShortener.FunctionalTests.csproj`)*
 
 ## 📖 Architecture Overview
 

@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{624D22B0-3D53-4FC0-9582-CF717706FD6E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.Api", "src\UrlShortener.Api\UrlShortener.Api.csproj", "{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.Core", "src\UrlShortener.Core\UrlShortener.Core.csproj", "{81A92B27-094C-4E2F-89D7-B9B31B536FF8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.Infrastructure", "src\UrlShortener.Infrastructure\UrlShortener.Infrastructure.csproj", "{FA2CCC3B-24EE-4FB4-909D-168A122F46A4}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{8055BDFF-8D32-4ABF-9690-D728946096A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.FunctionalTests", "tests\UrlShortener.FunctionalTests\UrlShortener.FunctionalTests.csproj", "{D019A93C-17B9-4DAE-A64E-F576F708C77A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.IntegrationTests", "tests\UrlShortener.IntegrationTests\UrlShortener.IntegrationTests.csproj", "{F317365C-02D0-4B80-8727-B21111FC8CE5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UrlShortener.UnitTests", "tests\UrlShortener.UnitTests\UrlShortener.UnitTests.csproj", "{5A036FAE-BFE1-491A-982D-02D947349CE3}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81A92B27-094C-4E2F-89D7-B9B31B536FF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81A92B27-094C-4E2F-89D7-B9B31B536FF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81A92B27-094C-4E2F-89D7-B9B31B536FF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81A92B27-094C-4E2F-89D7-B9B31B536FF8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA2CCC3B-24EE-4FB4-909D-168A122F46A4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA2CCC3B-24EE-4FB4-909D-168A122F46A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA2CCC3B-24EE-4FB4-909D-168A122F46A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA2CCC3B-24EE-4FB4-909D-168A122F46A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D019A93C-17B9-4DAE-A64E-F576F708C77A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D019A93C-17B9-4DAE-A64E-F576F708C77A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D019A93C-17B9-4DAE-A64E-F576F708C77A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D019A93C-17B9-4DAE-A64E-F576F708C77A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F317365C-02D0-4B80-8727-B21111FC8CE5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F317365C-02D0-4B80-8727-B21111FC8CE5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F317365C-02D0-4B80-8727-B21111FC8CE5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F317365C-02D0-4B80-8727-B21111FC8CE5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A036FAE-BFE1-491A-982D-02D947349CE3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A036FAE-BFE1-491A-982D-02D947349CE3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A036FAE-BFE1-491A-982D-02D947349CE3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A036FAE-BFE1-491A-982D-02D947349CE3}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{88E6BACB-C4A4-49E6-AB99-6A7F3AB7AFA9} = {624D22B0-3D53-4FC0-9582-CF717706FD6E}
+		{81A92B27-094C-4E2F-89D7-B9B31B536FF8} = {624D22B0-3D53-4FC0-9582-CF717706FD6E}
+		{FA2CCC3B-24EE-4FB4-909D-168A122F46A4} = {624D22B0-3D53-4FC0-9582-CF717706FD6E}
+		{D019A93C-17B9-4DAE-A64E-F576F708C77A} = {8055BDFF-8D32-4ABF-9690-D728946096A0}
+		{F317365C-02D0-4B80-8727-B21111FC8CE5} = {8055BDFF-8D32-4ABF-9690-D728946096A0}
+		{5A036FAE-BFE1-491A-982D-02D947349CE3} = {8055BDFF-8D32-4ABF-9690-D728946096A0}
+	EndGlobalSection
+EndGlobal
