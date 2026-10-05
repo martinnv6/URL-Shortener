@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\UrlShortener.Core\UrlShortener.Core.csproj" />
+    <ProjectReference Include="..\..\src\UrlShortener.Infrastructure\UrlShortener.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

@@ -12,6 +12,6 @@ public sealed record ClickAnalyticsResponse(
 /// Individual click event detail within the analytics response.
 /// </summary>
 public sealed record ClickDetail(
-    DateTimeOffset TimestampUtc,
+    DateTime TimestampUtc,
     string? UserAgent,
     string? Referer);

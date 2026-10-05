@@ -1,0 +1,79 @@
+# Implementation Plan: Fix SQLite DateTimeOffset ORDER BY Limitation in Analytics
+
+## Problem Statement
+During manual smoke testing in Swagger (`GET /api/v1/urls/{shortCode}/analytics`), the endpoint threw an HTTP 500 Internal Server Error:
+```text
+System.NotSupportedException: SQLite does not support expressions of type 'DateTimeOffset' in ORDER BY clauses. Convert the values to a supported type, or use LINQ to Objects to order the results on the client side.
+   at Microsoft.EntityFrameworkCore.Sqlite.Query.Internal.SqliteQueryableMethodTranslatingExpressionVisitor.TranslateOrderBy(...)
+   at UrlShortener.Api.Endpoints.UrlEndpoints.GetAnalytics(...) in UrlEndpoints.cs:line 136
+```
+
+## Root Cause Analysis
+1. **SQLite Storage Mechanics:** SQLite has no native date/time or date-with-offset types. EF Core maps `DateTimeOffset` properties to `TEXT` containing an ISO-8601 string with offset (e.g., `2026-09-17 19:00:00+00:00`).
+2. **Hard-Coded Expression Visitor Check:** In EF Core SQLite (`SqliteQueryableMethodTranslatingExpressionVisitor.TranslateOrderBy`), there is a strict guard:
+   ```csharp
+   if (keySelector.ReturnType == typeof(DateTimeOffset))
+   {
+       throw new NotSupportedException(SqliteStrings.OrderByDateTimeOffsetNotSupported);
+   }
+   ```
+   EF Core explicitly disallows translating `ORDER BY` on `DateTimeOffset` because lexicographical string sorting fails across varying timezone offsets.
+3. **Domain Entity Typing:** `ClickEvent.TimestampUtc` was defined as `DateTimeOffset`. However, because this property strictly stores UTC timestamps, timezone offsets are redundant. Using `DateTime` (with `DateTimeKind.Utc`) is the idiomatic .NET solution for SQLite, as EF Core SQLite natively translates `ORDER BY` on `DateTime` properties to SQL `ORDER BY "c"."TimestampUtc" DESC`.
+
+---
+
+## User Review Required
+
+> [!NOTE]
+> Converting `TimestampUtc` to `DateTime` preserves exact UTC precision and the JSON output format (`yyyy-MM-ddTHH:mm:ss.FFFFFFFZ`). No API contracts or client expectations will be broken.
+
+---
+
+## Proposed Changes
+
+### Core Layer
+
+#### [MODIFY] [`ClickEvent.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Core/Entities/ClickEvent.cs)
+- Change `public DateTimeOffset TimestampUtc { get; set; }` to `public DateTime TimestampUtc { get; set; }`.
+
+---
+
+### Infrastructure Layer
+
+#### [MODIFY] [`AnalyticsService.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Analytics/AnalyticsService.cs)
+- Update timestamp assignment from `DateTimeOffset.UtcNow` to `DateTime.UtcNow`.
+
+---
+
+### API Layer
+
+#### [MODIFY] [`ClickAnalyticsResponse.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Contracts/ClickAnalyticsResponse.cs)
+- Update `ClickDetail` record from `DateTimeOffset TimestampUtc` to `DateTime TimestampUtc`.
+
+#### [MODIFY] [`UrlEndpoints.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Endpoints/UrlEndpoints.cs)
+- Line 136 `OrderByDescending(e => e.TimestampUtc)` will now compile to native SQLite SQL without translation exceptions.
+
+---
+
+### Tests Layer
+
+#### [NEW] [`AnalyticsQueryTests.cs`](file:///c:/Repos/URL-Shortener/tests/UrlShortener.UnitTests/AnalyticsQueryTests.cs)
+- Add unit/integration test using SQLite in-memory DbContext to verify that `ClickEvents.Where(...).OrderByDescending(e => e.TimestampUtc).Take(10).ToListAsync()` translates and executes successfully.
+
+---
+
+### Documentation
+
+#### [MODIFY] [`AI_Collaboration.md`](file:///c:/Repos/URL-Shortener/AI_Collaboration.md)
+- Append **Entry 5** capturing the defect report, root cause analysis, audit decision, and engineering rationale.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- Run `dotnet test` to verify all 15 existing unit tests + new SQLite analytics query test pass.
+
+### Live Smoke Verification
+- Call `curl.exe -i http://localhost:5000/api/v1/urls/1/analytics` (or the shortened URL code created in the database).
+- Verify HTTP 200 OK response with JSON payload containing `totalClicks` and `recentClicks`.

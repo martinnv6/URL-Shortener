@@ -100,3 +100,20 @@
   5. **Query Performance & Indexing:** Added a composite index on `ClickEvent(ShortCode, TimestampUtc)` in EF Core to ensure queries fetching total count and the latest 10 clicks execute with index scans rather than full table scans.
 
 ---
+
+### Entry 5
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Resolve an HTTP 500 `NotSupportedException` encountered during Swagger smoke testing on `GET /api/v1/urls/{shortCode}/analytics`: "SQLite does not support expressions of type 'DateTimeOffset' in ORDER BY clauses." Analyze root cause, formulate a fix, verify with tests, and update the collaboration log.
+- **AI Output:**
+  - **Root Cause Analysis:** Identified that EF Core's SQLite query translator (`SqliteQueryableMethodTranslatingExpressionVisitor.TranslateOrderBy`) explicitly throws `NotSupportedException` when ordering by `DateTimeOffset` because string-based comparison of ISO-8601 strings containing variable timezone offsets fails to preserve true chronological order.
+  - **`src/UrlShortener.Core/Entities/ClickEvent.cs`**: Changed `TimestampUtc` from `DateTimeOffset` to `DateTime`. Because click events are strictly UTC, `DateTime` (with `DateTimeKind.Utc`) is the idiomatic representation and enables EF Core SQLite to translate `ORDER BY "c"."TimestampUtc" DESC` directly in SQL without runtime errors.
+  - **`src/UrlShortener.Infrastructure/Analytics/AnalyticsService.cs`**: Updated `TimestampUtc = DateTime.UtcNow` during click event construction.
+  - **`src/UrlShortener.Api/Contracts/ClickAnalyticsResponse.cs`**: Updated `ClickDetail` record from `DateTimeOffset TimestampUtc` to `DateTime TimestampUtc`, maintaining identical ISO-8601 JSON serialization.
+  - **`tests/UrlShortener.UnitTests/AnalyticsQueryTests.cs`**: Added SQLite in-memory test suite verifying that `ClickEvents.Where(...).OrderByDescending(e => e.TimestampUtc).Take(10).ToListAsync()` executes without exceptions and sorts records in descending chronological order.
+- **Your Audit Decision:** Accepted
+- **Engineering Rationale:**
+  1. **SQLite Type Affinity & Query Translation:** Unlike relational engines (SQL Server, Postgres) with native timestamp-with-time-zone data types, SQLite relies on text or integer affinity. In EF Core SQLite, `DateTime` properties in UTC format (`yyyy-MM-dd HH:mm:ss.FFFFFFF`) sort lexicographically identical to chronological order, whereas `DateTimeOffset` properties are deliberately blocked by EF Core query translation to prevent incorrect sort bugs across variable offsets.
+  2. **Zero API Contract Deviation:** Changing the internal entity and DTO to UTC `DateTime` produces the exact same ISO-8601 UTC timestamp format (`Z` suffix) in the JSON payload, ensuring 100% backwards compatibility with API consumers.
+  3. **Automated Query Regression Guard:** While the previous 15 unit tests only exercised pure Base62 arithmetic, adding `AnalyticsQueryTests` with SQLite in-memory guarantees that EF Core SQL translation for the analytics ingress queries is continuously validated during `dotnet test`.
+
+---
