@@ -59,3 +59,6 @@ if (app.Environment.IsDevelopment())
 app.MapUrlEndpoints();
 
 app.Run();
+
+// Expose Program class for functional testing
+public partial class Program { }

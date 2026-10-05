@@ -1,0 +1,43 @@
+Summary
+  Generated on: 9/17/2026 - 3:04:38 PM
+  Coverage date: 9/17/2026 - 2:34:59 PM - 9/17/2026 - 3:00:04 PM
+  Parser: MultiReport (9x Cobertura)
+  Assemblies: 3
+  Classes: 17
+  Files: 16
+  Line coverage: 87.5%
+  Covered lines: 308
+  Uncovered lines: 44
+  Coverable lines: 352
+  Total lines: 842
+  Branch coverage: 75% (48 of 64)
+  Covered branches: 48
+  Total branches: 64
+  Method coverage: 81.4% (44 of 54)
+  Full method coverage: 75.9% (41 of 54)
+  Covered methods: 44
+  Fully covered methods: 41
+  Total methods: 54
+
+UrlShortener.Api                                                    95.9%
+  Program                                                           82.6%
+  UrlShortener.Api.Contracts.ClickAnalyticsResponse                  100%
+  UrlShortener.Api.Contracts.ClickDetail                             100%
+  UrlShortener.Api.Contracts.CreateUrlRequest                        100%
+  UrlShortener.Api.Contracts.CreateUrlResponse                       100%
+  UrlShortener.Api.Endpoints.UrlEndpoints                            100%
+
+UrlShortener.Core                                                   82.5%
+  UrlShortener.Core.Encoding.Base62Encoder                           100%
+  UrlShortener.Core.Entities.ClickEvent                              100%
+  UrlShortener.Core.Entities.ClickEventAnalytics                       0%
+  UrlShortener.Core.Entities.ShortenedUrl                             80%
+  UrlShortener.Core.Services.UrlShortenerService                     100%
+
+UrlShortener.Infrastructure                                         84.5%
+  UrlShortener.Infrastructure.Analytics.AnalyticsProcessingWorker   90.9%
+  UrlShortener.Infrastructure.Analytics.AnalyticsService            76.1%
+  UrlShortener.Infrastructure.Analytics.ClickEventChannel            100%
+  UrlShortener.Infrastructure.Persistence.AppDbContext               100%
+  UrlShortener.Infrastructure.Persistence.SqliteUrlRepository        100%
+  UrlShortener.Infrastructure.Repositories.InMemoryUrlRepository       0%
