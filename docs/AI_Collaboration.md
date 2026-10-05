@@ -216,9 +216,47 @@
   4. **Unsafe API Consumption Guardrails:** Harden any outbound `HttpClient` usage with `AllowAutoRedirect = false`, strict timeouts, and max response size limits.
 - **AI Output:**
   - **`implementation_plan.md`:** Delivered a comprehensive plan covering all four features. Recommended **deferring Feature 4** to documentation-only since the current codebase has no outbound `HttpClient` consumers — the 302 redirect delegates fetching to the browser, not the server. Implementing a hardened `HttpClient` factory now would be speculative infrastructure with no caller. Proposed documenting the outbound HTTP policy in `ARCHITECTURE_PLAN.md` as a ready-to-implement contract. Included a full test matrix (~25-30 new test cases) covering SSRF rejection, rate limiting, concurrent alias conflicts, and ProblemDetails validation.
-- **Your Audit Decision:** Pending
+- **Your Audit Decision:** Pending - Approved
 - **Engineering Rationale:**
   1. **TOCTOU Defense-in-Depth:** The `AnyAsync` pre-check is retained as a fast-path optimization, but the unique index on `ShortCode` via `DbUpdateException` catch is the authoritative concurrency control. This eliminates the race window entirely without requiring distributed locks.
   2. **SSRF Kill Chain:** Validating URLs at the Core layer (not just the API layer) ensures that any future entry point (CLI, message queue, scheduled import) inherits the same SSRF protection without code duplication.
   3. **Rate Limiter Scope:** The in-memory sliding window is a deliberate design choice for single-instance deployments. The plan documents the known limitation that it is per-process and non-durable, requiring Redis/Memcached backing for horizontal scaling.
   4. **Feature 4 Deferral:** Implementing speculative infrastructure violates YAGNI and inflates the attack surface (more code = more bugs). The policy is documented so it can be implemented the moment a consumer is introduced.
+
+---
+
+### Entry 13
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Execute the OWASP API Security hardening plan (Features 1-4) with comprehensive unit and functional tests.
+- **AI Output:**
+  - Implemented all four OWASP features: SSRF validation guardrail (`UrlSafetyValidator.cs`), concurrency-safe alias management (`DbUpdateException` catch in `SqliteUrlRepository.cs`), sliding-window rate limiter middleware (`SlidingWindowRateLimiterMiddleware.cs`), and outbound HTTP policy documentation in `ARCHITECTURE_PLAN.md`.
+  - Created unit tests: `UrlSafetyValidatorTests.cs` (28 tests), `SlidingWindowRateLimiterTests.cs` (5 tests), concurrent alias test in `SqliteUrlRepositoryTests.cs`.
+  - Created functional tests: `SecurityEndpointTests.cs` (7 tests), `RateLimiterEndpointTests.cs` (1 test).
+  - **Coverage:** 87.2% line coverage, 96 tests passing.
+- **Your Audit Decision:** Pending - Approved
+- **Engineering Rationale:**
+  1. SSRF at Core Layer ensures any future ingestion path inherits protection without code duplication.
+  2. `DbUpdateException` catch is the authoritative concurrency control — `AnyAsync` is an optimization, not a guarantee.
+  3. `[GeneratedRegex]` source generator for alias validation eliminates JIT overhead and allocation cost.
+
+---
+
+### Entry 14
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Three-task synthesis: (1) Create exhaustive integration tests in `tests/UrlShortener.IntegrationTests/UrlShortenerApiTests.cs` covering happy paths, SSRF, alias collisions, 404, rate limiting. (2) Synthesize `docs/FINAL_ENGINEERING_SUMMARY.md`. (3) Verify `.gitignore` cleanliness.
+- **AI Output:**
+  - **Task 1 — Integration Tests:**
+    - Created `tests/UrlShortener.IntegrationTests/` project with `IsolatedWebApplicationFactory` (GUID-based SQLite isolation per fixture).
+    - 33 tests across 4 classes (`HappyPathTests`, `AdversarialValidationTests`, `AliasCollisionTests`, `RateLimitTests`), each with its own `IClassFixture<IsolatedWebApplicationFactory>` to isolate rate limiter budgets.
+    - Key scenarios: Base62 creation (201), redirect (302 + exact Location header), analytics after 3 redirects, malformed URLs (5 cases), SSRF loopback/private/metadata/scheme (13 cases), illegal alias characters (6 cases including XSS and SQL injection), sequential and concurrent alias collisions (409 ProblemDetails), 404 Not Found, and rate limit exhaustion (429 + Retry-After).
+  - **Task 2 — Final Engineering Summary:**
+    - Created `docs/FINAL_ENGINEERING_SUMMARY.md`: Publication-ready synthesis addressing all 8 core requirements, with traceability matrix, architectural trade-offs table, coverage by assembly, repository structure, and AI governance ledger documentation.
+  - **Task 3 — Repository Maintenance:**
+    - Added `urlshortener.integrationtests.db*` and `coveragereport/` patterns to `.gitignore`.
+    - Removed previously tracked `coveragereport/Summary.txt` and `src/UrlShortener.Api/urlshortener.db` from git index via `git rm --cached`.
+  - **Final Metrics:** 129 tests (75 unit + 21 functional + 33 integration), 100% pass rate, 88% line coverage.
+- **Your Audit Decision:** Pending - Approved
+- **Engineering Rationale:**
+  1. **Fixture-per-class isolation:** Each test class gets its own `IClassFixture<IsolatedWebApplicationFactory>` → its own ASP.NET Core pipeline → its own rate limiter middleware instance → its own 30 req/min budget. This eliminates cross-class rate limiter budget contention without modifying production middleware code.
+  2. **Integration over mocking:** The integration tests boot the full pipeline (middleware, DI, EF Core, background workers) via `WebApplicationFactory<Program>`, exercising the exact same code path as production. This catches categories of bugs that mocked unit tests cannot: middleware ordering, DI misconfiguration, serialization mismatches, and database constraint violations.
+  3. **GUID-based SQLite isolation:** Each test fixture provisions a unique database file (`urlshortener.integrationtests.{Guid}.db`), preventing state pollution and race conditions during xUnit's default parallel execution — zero need to disable parallelism.
