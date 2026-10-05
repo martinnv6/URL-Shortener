@@ -88,15 +88,21 @@ This project strictly adheres to the OWASP API Security Top 10 (2023). Key imple
 *   **API4:2023 Unrestricted Resource Consumption:** Mitigated via `SlidingWindowRateLimiterMiddleware`.
 *   **API10:2023 Unsafe Consumption of APIs (SSRF):** Addressed via strict URI parsing and local network blocking.
 
-## 🏷️ Assessment Milestones (Git Tags)
+## 🏷️ Assessment Milestones (Branches & Tags)
 
-The repository's evolution is organized into specific Git tags representing each stage of the assessment lifecycle:
+The repository's development lifecycle is organized into specific Git tags and branches corresponding to each scenario requested in the assessment brief:
 
-*   [`greenfield`](https://github.com/martinnv6/URL-Shortener/releases/tag/greenfield): **Part 1 — Greenfield Foundation.** Initial system design, Core domain abstractions, Base62 encoding algorithm, decoupled in-memory click analytics service, contract models, and unit tests.
-*   [`brownfield`](https://github.com/martinnv6/URL-Shortener/releases/tag/brownfield): **Part 2 — Persistence & Hardening.** Full EF Core with SQLite integration, background worker analytics pipeline (`System.Threading.Channels`), sliding-window rate limiting middleware, SSRF URL safety validation, and comprehensive functional & integration test suites.
-*   [`ambiguous`](https://github.com/martinnv6/URL-Shortener/releases/tag/ambiguous): **Part 3 — Edge Cases & Peer Review.** Comprehensive AI peer review, fixing ambiguous specifications (e.g., UTC timestamp normalization to `DateTimeOffset`), race-condition edge cases, and expanded analytics verification.
+| Scenario / Milestone | Git Tag | Git Branch | Commit Hash | Scope & Key Deliverables |
+| :--- | :--- | :--- | :--- | :--- |
+| **Part 1: Greenfield** | [`greenfield`](https://github.com/martinnv6/URL-Shortener/releases/tag/greenfield) | [`scenario/greenfield`](https://github.com/martinnv6/URL-Shortener/tree/scenario/greenfield) | `a826224` | Initial system design, Core domain abstractions, Base62 encoding algorithm, decoupled in-memory click analytics service, contract models, and unit tests. |
+| **Part 2: Brownfield** | [`brownfield`](https://github.com/martinnv6/URL-Shortener/releases/tag/brownfield) | [`scenario/brownfield`](https://github.com/martinnv6/URL-Shortener/tree/scenario/brownfield) | `7b0a8f0` | SQLite persistence with EF Core, asynchronous analytics background channel worker (`System.Threading.Channels`), sliding-window rate limiting middleware, SSRF URL safety validation, and full test suite. |
+| **Part 3: Ambiguous** | [`ambiguous`](https://github.com/martinnv6/URL-Shortener/releases/tag/ambiguous) | [`scenario/ambiguous`](https://github.com/martinnv6/URL-Shortener/tree/scenario/ambiguous) | `8182876` | Architectural AI peer review, fixing ambiguous specifications (e.g., UTC timestamp normalization to `DateTimeOffset`), race-condition handling, and expanded analytics verification. |
+| **Current Mainline** | — | [`main`](https://github.com/martinnv6/URL-Shortener/tree/main) | `HEAD` | Production Visual Studio solution file (`UrlShortener.sln`), GitHub Actions CI pipeline ([`.github/workflows/ci.yml`](./.github/workflows/ci.yml)), and full documentation. |
 
----
+### Why Both Branches and Tags Exist
+Both are valid and serve complementary purposes:
+*   **Git Tags:** Serve as **immutable milestone releases**. Reviewers can immediately check out a tag or view it under GitHub Releases to review the exact state of each deliverable without branch divergence.
+*   **Git Branches (`scenario/*`):** Demonstrate a **real-world SDLC branch-based delivery workflow**, showcasing feature isolation and PR readiness.
 
 ## 📚 Project Documentation
 
