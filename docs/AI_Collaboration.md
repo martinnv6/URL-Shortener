@@ -9,7 +9,7 @@
 ## Interaction Log
 
 ### Entry 1
-- **Timestamp:** 2026-09-16
+- **Timestamp:** 2026-10-05 11:35 AM
 - **Prompt Intent:** Configure `AI_Collaboration.md` to log all session interactions, capturing Martin's point of view with prompt intent, model output, audit decisions (Accepted/Modified/Rejected), and engineering rationales.
 - **AI Output:** Created and structured `AI_Collaboration.md` with the requested schema and documented the initial setup interaction. Committed to updating this document on every subsequent exchange.
 - **Your Audit Decision:** Accepted
@@ -18,7 +18,7 @@
 ---
 
 ### Entry 2
-- **Timestamp:** 2026-09-16
+- **Timestamp:** 2026-10-05 12:00 PM
 - **Prompt Intent:** Implement the greenfield URL Shortener core: Base62 encoding engine (zero-allocation), in-memory thread-safe repository, service layer, Minimal API endpoints (POST `/api/v1/urls`, GET `/{shortCode}`), and xUnit tests. Explicitly reject any AI code using string concatenation in the modulo loop — force `stackalloc char[11]` + `Span<char>`.
 - **AI Output:**
   - **`src/UrlShortener.Core/Encoding/Base62Encoder.cs`**: Static `Encode(ulong)` method using `stackalloc char[11]` and `Span<char>` slicing. `ReadOnlySpan<char>` used for the alphabet literal (JIT-optimized to point at static data segment). The modulo-division loop performs **zero heap allocations**; only the final `new string(buffer[position..])` allocates.
@@ -40,7 +40,7 @@
 ---
 
 ### Entry 3
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 12:15 PM
 - **Prompt Intent:** Resolve a VS Code launch configuration schema error and add standard Swagger/OpenAPI documentation to the API project.
 - **AI Output:**
   - **`.vscode/launch.json`**: Fixed schema validation error by changing `serverReadyAction.action` from `"openUrl"` to `"openExternally"`.
@@ -54,7 +54,7 @@
 ---
 
 ### Entry 4
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 12:35 PM
 - **Prompt Intent:** Execute a brownfield refactor of the existing URL Shortener codebase to introduce database persistence and decoupled analytics without breaking existing unit tests or API contracts, adhering to the following strict requirements:
   1. **Data Layer Refactoring:**
      - In `src/UrlShortener.Infrastructure/Persistence/`, create `AppDbContext.cs` using EF Core with SQLite.
@@ -102,7 +102,7 @@
 ---
 
 ### Entry 5
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 12:50 PM
 - **Prompt Intent:** Resolve an HTTP 500 `NotSupportedException` encountered during Swagger smoke testing on `GET /api/v1/urls/{shortCode}/analytics`: "SQLite does not support expressions of type 'DateTimeOffset' in ORDER BY clauses." Analyze root cause, formulate a fix, verify with tests, and update the collaboration log.
 - **AI Output:**
   - **Root Cause Analysis:** Identified that EF Core's SQLite query translator (`SqliteQueryableMethodTranslatingExpressionVisitor.TranslateOrderBy`) explicitly throws `NotSupportedException` when ordering by `DateTimeOffset` because string-based comparison of ISO-8601 strings containing variable timezone offsets fails to preserve true chronological order.
@@ -119,7 +119,7 @@
 ---
 
 ### Entry 6
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 13:15 PM
 - **Prompt Intent:** Run an analysis to check test coverage, implement needed tests, and provide an analysis on whether Functional tests are a good approach for this project.
 - **AI Output:**
   - **Coverage Analysis & Execution:** Initially executed `dotnet test /p:CollectCoverage=true` and found total line coverage was ~26%. `UrlShortener.Core` lacked `UrlShortenerService` tests and `UrlShortener.Infrastructure` lacked `SqliteUrlRepository`, `AnalyticsService`, and `ClickEventChannel` tests. Proposed an implementation plan which was approved.
@@ -135,7 +135,7 @@
 ---
 
 ### Entry 7
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 13:30 PM
 - **Prompt Intent:** Validate the code coverage after the recent test implementations and update the collaboration log.
 - **AI Output:**
   - **Coverage Validation:** Re-ran `dotnet test --collect:"XPlat Code Coverage"`. The new test run successfully completed with 27 passing tests.
@@ -148,7 +148,7 @@
 ---
 
 ### Entry 8
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 13:45 PM
 - **Prompt Intent:** Implement functional tests to increase test coverage across the API endpoints and HTTP pipeline (requesting an implementation plan).
 - **AI Output:**
   - **Initial Implementation Plan:** Formulated an initial implementation plan for a new `UrlShortener.FunctionalTests` project using `Microsoft.AspNetCore.Mvc.Testing` and `WebApplicationFactory<Program>`. Proposed tests for basic endpoint status codes (POST create, GET redirect, GET analytics with 0 clicks) using a naive SQLite in-memory configuration (`DataSource=:memory:`), while explicitly deeming asynchronous analytics pipeline verification as "out of scope".
@@ -161,7 +161,7 @@
 ---
 
 ### Entry 9
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 13:55 PM
 - **Prompt Intent:** Formulate a comprehensive Revision 2 of the functional tests implementation plan incorporating all improvements prior to test implementation, specifically ensuring that production and deployed environments are safeguarded at all times by utilizing a dedicated database file (`urlshortener.functionaltests.db`) and its connection string for functional testing.
 - **AI Output:**
   - **`implementation_plan.md` (Revision 2 - Comprehensive):** Delivered a comprehensive implementation plan detailing:
@@ -178,7 +178,7 @@
 ---
 
 ### Entry 10
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 14:05 PM
 - **Prompt Intent:** Implement the Plan (Revision 2)
 - **AI Output:**
   - **`task.md` & `walkthrough.md`**: Tracked execution and summarized functional tests completion.
@@ -193,7 +193,7 @@
 ---
 
 ### Entry 11
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 14:15 PM
 - **Prompt Intent:** Document the specific troubleshooting actions, bug fixes, and code coverage report generation performed during the functional test implementation.
 - **AI Output:**
   - **Test Compilation Fix:** Corrected contract naming mismatches in the test assertions (`ShortenedUrlResponse` -> `CreateUrlResponse`).
@@ -208,7 +208,7 @@
 ---
 
 ### Entry 12
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 14:25 PM
 - **Prompt Intent:** Implement OWASP API Security Top 10 (2023) hardening across the URL Shortener, specifically targeting API7:2023 (Server-Side Request Forgery) and API10:2023 (Unsafe Consumption of APIs). Four features requested:
   1. **High-Concurrency Custom Alias Management:** Wrap `SaveChangesAsync` in `try-catch(DbUpdateException)` to catch unique index violations on concurrent duplicate alias claims, returning structured HTTP 409 Conflict with ProblemDetails. Do not rely solely on the `AnyAsync` pre-check (TOCTOU race condition).
   2. **Malicious URL & SSRF Validation Guardrail:** Create `UrlSafetyValidator.cs` in `UrlShortener.Core/Validation/` using native `System.Uri` parsing. Reject non-http/https schemes, loopback addresses (`127.0.0.0/8`, `localhost`, `::1`), RFC 1918 private IPs (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), link-local/cloud metadata endpoints (`169.254.0.0/16`, including `169.254.169.254`), and IPv6-mapped IPv4 variants. Return structured reason codes.
@@ -226,7 +226,7 @@
 ---
 
 ### Entry 13
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 14:40 PM
 - **Prompt Intent:** Execute the OWASP API Security hardening plan (Features 1-4) with comprehensive unit and functional tests.
 - **AI Output:**
   - Implemented all four OWASP features: SSRF validation guardrail (`UrlSafetyValidator.cs`), concurrency-safe alias management (`DbUpdateException` catch in `SqliteUrlRepository.cs`), sliding-window rate limiter middleware (`SlidingWindowRateLimiterMiddleware.cs`), and outbound HTTP policy documentation in `ARCHITECTURE_PLAN.md`.
@@ -242,7 +242,7 @@
 ---
 
 ### Entry 14
-- **Timestamp:** 2026-09-17
+- **Timestamp:** 2026-10-05 15:20 PM
 - **Prompt Intent:** Three-task synthesis: (1) Create exhaustive integration tests in `tests/UrlShortener.IntegrationTests/UrlShortenerApiTests.cs` covering happy paths, SSRF, alias collisions, 404, rate limiting. (2) Synthesize `docs/FINAL_ENGINEERING_SUMMARY.md`. (3) Verify `.gitignore` cleanliness.
 - **AI Output:**
   - **Task 1 — Integration Tests:**

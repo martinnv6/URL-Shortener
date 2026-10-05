@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<coverage line-rate="0.25980000000000003" branch-rate="0.0833" version="1.9" timestamp="1789672798" lines-covered="66" lines-valid="254" branches-covered="4" branches-valid="48">
+<coverage line-rate="0.25980000000000003" branch-rate="0.0833" version="1.9" timestamp="1791226658" lines-covered="66" lines-valid="254" branches-covered="4" branches-valid="48">
   <sources>
     <source>C:/Repos/URL-Shortener/src/</source>
   </sources>

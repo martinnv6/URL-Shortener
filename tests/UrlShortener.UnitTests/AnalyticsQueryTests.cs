@@ -33,7 +33,7 @@ public sealed class AnalyticsQueryTests : IDisposable
     {
         // Arrange
         const string shortCode = "testCode";
-        var baseTime = new DateTime(2026, 9, 17, 12, 0, 0, DateTimeKind.Utc);
+        var baseTime = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
 
         await using (var context = new AppDbContext(_options))
         {

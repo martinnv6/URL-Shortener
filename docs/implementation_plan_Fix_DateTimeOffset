@@ -9,7 +9,7 @@ System.NotSupportedException: SQLite does not support expressions of type 'DateT
 ```
 
 ## Root Cause Analysis
-1. **SQLite Storage Mechanics:** SQLite has no native date/time or date-with-offset types. EF Core maps `DateTimeOffset` properties to `TEXT` containing an ISO-8601 string with offset (e.g., `2026-09-17 19:00:00+00:00`).
+1. **SQLite Storage Mechanics:** SQLite has no native date/time or date-with-offset types. EF Core maps `DateTimeOffset` properties to `TEXT` containing an ISO-8601 string with offset (e.g., `2026-10-05 13:00:00+00:00`).
 2. **Hard-Coded Expression Visitor Check:** In EF Core SQLite (`SqliteQueryableMethodTranslatingExpressionVisitor.TranslateOrderBy`), there is a strict guard:
    ```csharp
    if (keySelector.ReturnType == typeof(DateTimeOffset))
