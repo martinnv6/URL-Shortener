@@ -117,3 +117,32 @@
   3. **Automated Query Regression Guard:** While the previous 15 unit tests only exercised pure Base62 arithmetic, adding `AnalyticsQueryTests` with SQLite in-memory guarantees that EF Core SQL translation for the analytics ingress queries is continuously validated during `dotnet test`.
 
 ---
+
+### Entry 6
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Run an analysis to check test coverage, implement needed tests, and provide an analysis on whether Functional tests are a good approach for this project.
+- **AI Output:**
+  - **Coverage Analysis & Execution:** Initially executed `dotnet test /p:CollectCoverage=true` and found total line coverage was ~26%. `UrlShortener.Core` lacked `UrlShortenerService` tests and `UrlShortener.Infrastructure` lacked `SqliteUrlRepository`, `AnalyticsService`, and `ClickEventChannel` tests. Proposed an implementation plan which was approved.
+  - **Implementation:** Added the `Moq` package to `UrlShortener.UnitTests`. Implemented 11 new tests including `UrlShortenerServiceTests`, `SqliteUrlRepositoryTests`, `AnalyticsServiceTests`, and `ClickEventChannelTests`. Fixed compile errors related to `CreatedAt` vs `CreatedAtUtc` properties. Verified that all 27 unit tests pass. 
+  - **Functional Test Analysis:** Responded that Functional Tests using `WebApplicationFactory` are highly recommended for this project. Because Minimal APIs are deeply integrated with DI and HTTP request pipelines, integration testing the endpoints end-to-end offers much higher confidence than mocking the HTTP context.
+- **Your Audit Decision:** Accepted
+- **Engineering Rationale:**
+  1. **Test Coverage Verification:** Running factual metrics prior to writing tests avoids blind spots and ensures engineering effort targets the most critical, untested logic.
+  2. **Boundary Testing & OOM Prevention:** Explicitly testing the `ClickEventChannel` capacity limit (10,000) and `DropOldest` behavior validates that the channel will indeed protect the application from Out-Of-Memory exceptions during high load spikes without throwing exceptions on the hot redirect path.
+  3. **Repository Testing:** Using an in-memory SQLite database for `SqliteUrlRepositoryTests` verifies actual EF Core physical persistence logic rather than relying on brittle DbSet mocking.
+  4. **Functional Testing Value:** In modern .NET Minimal APIs, controllers don't exist in isolation; the true value lies in testing the complete request/response lifecycle. Using in-memory `WebApplicationFactory` ensures we test actual API contracts directly.
+
+---
+
+### Entry 7
+- **Timestamp:** 2026-09-17
+- **Prompt Intent:** Validate the code coverage after the recent test implementations and update the collaboration log.
+- **AI Output:**
+  - **Coverage Validation:** Re-ran `dotnet test --collect:"XPlat Code Coverage"`. The new test run successfully completed with 27 passing tests.
+  - **Metrics:** Line coverage increased from 25.98% to **56.69%**. Branch coverage increased to 36%.
+  - **Analysis:** The `UrlShortener.Core` and `UrlShortener.Infrastructure` classes targeted by the new tests are now properly covered. The remaining ~43% of uncovered code resides almost entirely in the `UrlShortener.Api` project (Minimal API endpoints in `UrlEndpoints.cs` and DI setup in `Program.cs`), as well as the background `AnalyticsProcessingWorker`. As noted in Entry 6, these are best validated via `FunctionalTests` using `WebApplicationFactory` rather than brittle unit tests.
+- **Your Audit Decision:** Pending
+- **Engineering Rationale:**
+  1. **Progressive Testing Strategy:** Achieved robust unit testing coverage for the core domain and infrastructure adapters first. This lays the foundation of confidence before moving up the stack to integration testing the HTTP endpoints.
+
+---

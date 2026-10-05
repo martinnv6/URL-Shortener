@@ -1,0 +1,69 @@
+# Walkthrough — Brownfield Refactor: EF Core Persistence & Analytics Pipeline
+
+## Summary
+
+Introduced durable SQLite persistence via EF Core and a decoupled, bounded-channel analytics pipeline to the URL Shortener. All existing API contracts, response shapes, and unit tests are preserved.
+
+---
+
+## Changes Made
+
+### Core Layer (2 new files)
+| File | Purpose |
+|------|---------|
+| [`ClickEvent.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Core/Entities/ClickEvent.cs) | Analytics domain entity: Id, ShortCode, TimestampUtc, UserAgent, Referer |
+| [`IAnalyticsService.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Core/Interfaces/IAnalyticsService.cs) | Non-blocking `void TrackClick(...)` interface — synchronous because it only does `TryWrite` |
+
+### Infrastructure Layer — Persistence (3 files: 1 modified, 2 new)
+| File | Purpose |
+|------|---------|
+| [`UrlShortener.Infrastructure.csproj`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/UrlShortener.Infrastructure.csproj) | Added `Microsoft.EntityFrameworkCore.Sqlite` 8.0.31 + `Microsoft.Extensions.Hosting.Abstractions` 8.0.0 |
+| [`AppDbContext.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Persistence/AppDbContext.cs) | EF Core DbContext — Fluent API config, unique index on `ShortCode`, index on `ClickEvent.ShortCode` |
+| [`SqliteUrlRepository.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Persistence/SqliteUrlRepository.cs) | Two-phase create: insert → get auto-ID → `Base62Encoder.Encode()` → update |
+
+### Infrastructure Layer — Analytics Pipeline (3 new files)
+| File | Purpose |
+|------|---------|
+| [`ClickEventChannel.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Analytics/ClickEventChannel.cs) | Bounded `Channel<ClickEvent>` — 10K capacity, `DropOldest`, `SingleReader=true` |
+| [`AnalyticsService.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Analytics/AnalyticsService.cs) | `TryWrite` to channel — non-blocking, fire-and-forget, never throws |
+| [`AnalyticsProcessingWorker.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Infrastructure/Analytics/AnalyticsProcessingWorker.cs) | `BackgroundService` — batches 100 events or 1s timeout, scoped `AppDbContext` per batch, graceful shutdown drains remaining events |
+
+### API Layer (4 files: 3 modified, 1 new)
+| File | Purpose |
+|------|---------|
+| [`appsettings.json`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/appsettings.json) | Added `ConnectionStrings.DefaultConnection` for SQLite |
+| [`Program.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Program.cs) | Swapped `InMemoryUrlRepository` → `SqliteUrlRepository`, registered DbContext, channel, analytics service, background worker. `EnsureCreatedAsync()` on startup |
+| [`UrlEndpoints.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Endpoints/UrlEndpoints.cs) | `GET /{shortCode}` dispatches `TrackClick()` before redirect. New `GET /api/v1/urls/{shortCode}/analytics` endpoint |
+| [`ClickAnalyticsResponse.cs`](file:///c:/Repos/URL-Shortener/src/UrlShortener.Api/Contracts/ClickAnalyticsResponse.cs) | DTO records: `ClickAnalyticsResponse` + `ClickDetail` |
+
+---
+
+## Verification Results
+
+| Check | Result |
+|-------|--------|
+| Build | ✅ 0 errors, 0 warnings |
+| Unit Tests | ✅ 16/16 passed (including new `AnalyticsQueryTests` for SQLite query translation) |
+| API Contracts | ✅ Preserved — same JSON shapes for POST, redirect, and analytics |
+| SQLite OrderBy Bugfix | ✅ Fixed: `TimestampUtc` changed from `DateTimeOffset` to `DateTime` (UTC), enabling native SQLite `ORDER BY` translation |
+
+---
+
+## Smoke Test Instructions
+
+```powershell
+# Start the API
+dotnet run --project src/UrlShortener.Api
+
+# In another terminal:
+# 1. Create a short URL
+curl -X POST http://localhost:5000/api/v1/urls -H "Content-Type: application/json" -d '{"url": "https://github.com"}'
+
+# 2. Follow the redirect (use -v to see 302)
+curl -v http://localhost:5000/{shortCode}
+
+# 3. Check analytics (click count should increment)
+curl http://localhost:5000/api/v1/urls/{shortCode}/analytics
+```
+
+Or open **Swagger UI** at `http://localhost:5000/swagger` to test interactively.
